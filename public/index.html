@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Matériauthèque - Documentation Technique & Workflow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Fira+Code:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #f8fafc;
+        color: #0f172a;
+      }
+      .font-mono {
+        font-family: "Fira Code", monospace;
+      }
+
+      /* Custom Flow Connector Styles (CSS Only - No SVG) */
+      .connector-v {
+        width: 2px;
+        background-color: #cbd5e1;
+        margin: 0 auto;
+        height: 20px;
+      }
+      .connector-arrow-down {
+        width: 0;
+        height: 0;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 8px solid #cbd5e1;
+        margin: 0 auto;
+      }
+
+      .card {
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+          0 4px 6px -2px rgba(0, 0, 0, 0.05);
+      }
+
+      .badge-manual {
+        background-color: #fef3c7;
+        color: #d97706;
+        border: 1px solid #fcd34d;
+      }
+      .badge-auto {
+        background-color: #d1fae5;
+        color: #059669;
+        border: 1px solid #6ee7b7;
+      }
+
+      .step-number {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background-color: #3b82f6;
+        color: white;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: bold;
+        margin-right: 8px;
+      }
+    </style>
+  </head>
+  <body class="p-4 md:p-8">
+    <!-- Header -->
+    <header class="max-w-6xl mx-auto mb-12 text-center">
+      <div
+        class="inline-block px-3 py-1 mb-4 text-xs font-semibold tracking-wider text-blue-600 uppercase bg-blue-100 rounded-full"
+      >
+        Onboarding Technique
+      </div>
+      <h1 class="text-4xl md:text-5xl font-extrabold text-slate-900 mb-4">
+        Matériauthèque <span class="text-blue-600">RessourceS</span>
+      </h1>
+      <p class="text-lg text-slate-600 max-w-2xl mx-auto">
+        Documentation du flux de données, de la stack technique et des processus
+        d'automatisation.
+        <br /><span class="text-sm italic opacity-75"
+          >Version Janvier 2026 - Architecture Node.js/Vercel</span
+        >
+      </p>
+    </header>
+
+    <main class="max-w-6xl mx-auto space-y-16">
+      <!-- SECTION 1: LA STACK -->
+      <section>
+        <h2 class="text-2xl font-bold mb-6 flex items-center">
+          <span class="text-3xl mr-3">🛠️</span> La Stack Technique Actuelle
+        </h2>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <!-- Airtable -->
+          <div
+            class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm card"
+          >
+            <div class="h-2 w-full bg-yellow-400 rounded-t mb-2"></div>
+            <h3 class="font-bold text-lg">Airtable</h3>
+            <p class="text-xs text-slate-500 mb-2">Base de Données Master</p>
+            <ul class="text-xs list-disc list-inside text-slate-600">
+              <li>Inventaire (App Mobile)</li>
+              <li>Stockage Photos</li>
+              <li>Gestion Partenaires</li>
+            </ul>
+          </div>
+
+          <!-- Node.js / Vercel -->
+          <div
+            class="bg-slate-900 text-white p-4 rounded-xl shadow-md card relative overflow-hidden"
+          >
+            <div
+              class="absolute top-0 right-0 bg-green-500 text-[10px] font-bold px-2 py-1 rounded-bl"
+            >
+              CŒUR DU SYSTÈME
+            </div>
+            <h3 class="font-bold text-lg">Node.js (Vercel)</h3>
+            <p class="text-xs text-slate-400 mb-2">Middleware de Synchro</p>
+            <ul class="text-xs list-disc list-inside text-slate-300 font-mono">
+              <li>api/sync.js</li>
+              <li>Axios (Webflow API V2)</li>
+              <li>Proxy Images</li>
+            </ul>
+          </div>
+
+          <!-- Webflow -->
+          <div
+            class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm card"
+          >
+            <div class="h-2 w-full bg-blue-500 rounded-t mb-2"></div>
+            <h3 class="font-bold text-lg">Webflow</h3>
+            <p class="text-xs text-slate-500 mb-2">Frontend & CMS</p>
+            <ul class="text-xs list-disc list-inside text-slate-600">
+              <li>Collections CMS</li>
+              <li>Interface Client</li>
+              <li>Vitrines</li>
+            </ul>
+          </div>
+
+          <!-- Cron Job -->
+          <div
+            class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm card"
+          >
+            <div class="h-2 w-full bg-purple-500 rounded-t mb-2"></div>
+            <h3 class="font-bold text-lg">Cron-Job.org</h3>
+            <p class="text-xs text-slate-500 mb-2">Déclencheur</p>
+            <p class="text-xs text-slate-600">
+              Appelle le script Vercel toutes les <b>30 min</b>.
+            </p>
+          </div>
+
+          <!-- GitHub -->
+          <div
+            class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm card"
+          >
+            <div class="h-2 w-full bg-gray-800 rounded-t mb-2"></div>
+            <h3 class="font-bold text-lg">GitHub</h3>
+            <p class="text-xs text-slate-500 mb-2">Versioning</p>
+            <p class="text-xs text-slate-600">
+              Stockage du code source et déploiement continu vers Vercel.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 2: WORKFLOW INVENTAIRE (ENTRANT) -->
+      <section class="relative">
+        <h2 class="text-2xl font-bold mb-8 flex items-center">
+          <span class="text-3xl mr-3">📦</span> Processus 1 : Inventaire &
+          Publication
+        </h2>
+
+        <div class="bg-white p-6 rounded-2xl shadow border border-slate-200">
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+            <!-- COL 1: INPUT -->
+            <div class="md:col-span-3 space-y-4">
+              <div
+                class="font-bold text-slate-400 text-xs uppercase tracking-widest text-center"
+              >
+                CHEZ LE PARTENAIRE
+              </div>
+              <div
+                class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg text-center"
+              >
+                <div class="text-3xl mb-2">📱</div>
+                <h4 class="font-bold text-slate-800">Saisie Airtable</h4>
+                <p class="text-xs text-slate-600 mt-1">
+                  Prise de photos + Remplissage Données
+                </p>
+                <div
+                  class="mt-2 inline-block px-2 py-1 rounded bg-white border border-slate-200 text-xs"
+                >
+                  Statut: "A Publier"
+                </div>
+              </div>
+            </div>
+
+            <!-- ARROW -->
+            <div class="md:col-span-1 flex justify-center">
+              <div class="hidden md:block text-2xl text-slate-300">➔</div>
+              <div
+                class="block md:hidden text-2xl text-slate-300 transform rotate-90 my-2"
+              >
+                ➔
+              </div>
+            </div>
+
+            <!-- COL 2: AUTOMATION -->
+            <div class="md:col-span-4 space-y-4 relative">
+              <div
+                class="font-bold text-blue-500 text-xs uppercase tracking-widest text-center"
+              >
+                AUTOMATISATION (BACKEND)
+              </div>
+              <div
+                class="absolute -top-3 right-0 badge-auto text-[10px] px-2 py-0.5 rounded-full"
+              >
+                CRON 30min
+              </div>
+
+              <div
+                class="bg-slate-800 text-white p-5 rounded-lg border border-slate-700 shadow-lg"
+              >
+                <div class="flex items-center justify-between mb-3">
+                  <span class="font-mono text-green-400 font-bold text-sm"
+                    >api/sync.js</span
+                  >
+                  <span class="text-xs bg-slate-700 px-2 rounded">Node.js</span>
+                </div>
+                <ul class="text-xs space-y-2 font-mono text-slate-300">
+                  <li class="flex items-start">
+                    <span class="mr-2 text-green-500">1.</span> Lit les produits
+                    "A Publier"
+                  </li>
+                  <li class="flex items-start">
+                    <span class="mr-2 text-green-500">2.</span> Trouve/Crée
+                    Partenaire & Catégorie
+                  </li>
+                  <li class="flex items-start">
+                    <span class="mr-2 text-green-500">3.</span> Proxy des Images
+                    (Airtable > Webflow)
+                  </li>
+                  <li class="flex items-start">
+                    <span class="mr-2 text-green-500">4.</span> Update Airtable
+                    ➔ "Publié"
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- ARROW -->
+            <div class="md:col-span-1 flex justify-center">
+              <div class="hidden md:block text-2xl text-slate-300">➔</div>
+              <div
+                class="block md:hidden text-2xl text-slate-300 transform rotate-90 my-2"
+              >
+                ➔
+              </div>
+            </div>
+
+            <!-- COL 3: OUTPUT -->
+            <div class="md:col-span-3 space-y-4">
+              <div
+                class="font-bold text-slate-400 text-xs uppercase tracking-widest text-center"
+              >
+                PUBLICATION & DIFFUSION
+              </div>
+
+              <!-- Webflow Block -->
+              <div class="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+                <h4 class="font-bold text-blue-900 text-sm">Webflow CMS</h4>
+                <div class="flex items-center mt-2">
+                  <span
+                    class="badge-manual text-[10px] px-2 py-0.5 rounded mr-2"
+                    >Action Manuelle</span
+                  >
+                  <span class="text-xs text-slate-600"
+                    >Passer en "Publish"</span
+                  >
+                </div>
+              </div>
+
+              <!-- LBC Block -->
+              <div
+                class="bg-orange-50 border border-orange-200 p-3 rounded-lg opacity-75"
+              >
+                <h4 class="font-bold text-orange-900 text-sm">LeBonCoin</h4>
+                <div class="flex items-center mt-2">
+                  <span
+                    class="badge-manual text-[10px] px-2 py-0.5 rounded mr-2"
+                    >Action Manuelle</span
+                  >
+                  <span class="text-xs text-slate-600">IA + Copier/Coller</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 3: WORKFLOW VENTE (MISE A JOUR) -->
+      <section>
+        <h2 class="text-2xl font-bold mb-8 flex items-center">
+          <span class="text-3xl mr-3">💰</span> Processus 2 : Vente & Mise à
+          jour
+        </h2>
+
+        <div class="bg-white p-6 rounded-2xl shadow border border-slate-200">
+          <div class="flex flex-col md:flex-row gap-8">
+            <!-- Étape 1 -->
+            <div class="flex-1">
+              <div class="flex items-center mb-3">
+                <span class="step-number">1</span>
+                <h3 class="font-bold text-slate-800">Déclaration Vente</h3>
+              </div>
+              <div
+                class="bg-gray-50 p-4 rounded-lg text-sm text-slate-600 border border-gray-200"
+              >
+                <p class="mb-2">
+                  <span class="font-bold text-red-500">Actuel :</span> Le
+                  partenaire se connecte à Airtable (accès global) et modifie le
+                  stock ou le statut.
+                </p>
+                <p class="text-xs text-slate-400">
+                  ⚠️ Risque de sécurité (accès aux données des autres).
+                </p>
+                <hr class="my-2 border-slate-200" />
+                <p class="font-bold text-blue-600">Cible (Wized) :</p>
+                <p class="text-xs">
+                  Portail dédié sécurisé sur le site Webflow.
+                </p>
+              </div>
+            </div>
+
+            <!-- Étape 2 -->
+            <div class="flex-1">
+              <div class="flex items-center mb-3">
+                <span class="step-number">2</span>
+                <h3 class="font-bold text-slate-800">Synchronisation</h3>
+              </div>
+              <div
+                class="bg-gray-50 p-4 rounded-lg text-sm text-slate-600 border border-gray-200"
+              >
+                <p class="mb-2">
+                  Nous passons le statut Airtable en <br /><code
+                    class="bg-slate-200 px-1 rounded"
+                    >Mise à jour demandée</code
+                  >.
+                </p>
+                <div class="mt-2 flex items-center">
+                  <span class="text-2xl mr-2">⚙️</span>
+                  <span class="text-xs"
+                    >Le Cron Job (30min) détecte le changement et met à jour
+                    Webflow (Prix, Stock, Statut Vente).</span
+                  >
+                </div>
+              </div>
+            </div>
+
+            <!-- Étape 3 -->
+            <div class="flex-1">
+              <div class="flex items-center mb-3">
+                <span class="step-number">3</span>
+                <h3 class="font-bold text-slate-800">Admin & Facturation</h3>
+              </div>
+              <div
+                class="bg-gray-50 p-4 rounded-lg text-sm text-slate-600 border border-gray-200"
+              >
+                <ul class="space-y-2">
+                  <li class="flex items-start">
+                    <span class="mr-2">📧</span>
+                    <span>Notification email lors de la modif Airtable.</span>
+                  </li>
+                  <li class="flex items-start">
+                    <span class="mr-2">📝</span>
+                    <span
+                      >Point mensuel manuel pour facturation (via
+                      Emails/Airtable).</span
+                    >
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 4: ROADMAP TECHNIQUE -->
+      <section class="bg-slate-900 text-white rounded-2xl p-8">
+        <h2 class="text-2xl font-bold mb-6 text-white">🚀 Roadmap Technique</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <!-- Projet A -->
+          <div>
+            <h3
+              class="text-xl font-bold text-blue-400 mb-3 border-b border-slate-700 pb-2"
+            >
+              Projet A : Wized (Portail Partenaire)
+            </h3>
+            <p class="text-slate-300 text-sm mb-4">
+              Remplacer l'accès direct Airtable par une interface Webflow
+              sécurisée.
+            </p>
+            <ul class="text-sm space-y-2 text-slate-400">
+              <li>□ Créer page Login & Dashboard sur Webflow</li>
+              <li>□ Configurer Wized pour lire Airtable (filtré par user)</li>
+              <li>□ Permettre l'update du stock via Wized</li>
+            </ul>
+          </div>
+
+          <!-- Projet B -->
+          <div>
+            <h3
+              class="text-xl font-bold text-green-400 mb-3 border-b border-slate-700 pb-2"
+            >
+              Projet B : Centralisation Ventes
+            </h3>
+            <p class="text-slate-300 text-sm mb-4">
+              Créer un dashboard Admin pour suivre le CA.
+            </p>
+            <ul class="text-sm space-y-2 text-slate-400">
+              <li>□ Créer une vue "Ventes du mois" fiable dans Airtable</li>
+              <li>
+                □ Automatiser l'envoi du récapitulatif mensuel (Make ou Script)
+              </li>
+              <li>□ (Optionnel) Dashboard graphique avec Wized/Chart.js</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="text-center text-slate-400 text-xs py-12">
+      <p>© 2026 Matériauthèque RessourceS - Document interne</p>
+    </footer>
+  </body>
+</html>
