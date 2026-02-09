@@ -1,5 +1,5 @@
-// Version "Master Sync - V53 SLUG CORRECTION"
-// Correction basée sur la capture d'écran CMS (Infos au pluriel, Categorie en français)
+// Version "Master Sync - V54 LOWERCASE FIX"
+// Correction critique : Tous les Slugs Webflow doivent être en minuscules strictes
 
 const Airtable = require('airtable');
 const axios = require('axios');
@@ -27,40 +27,40 @@ const WF_IDS = {
 const AIRTABLE_TABLE_PRODUITS = 'Gisement V2'; 
 const AIRTABLE_TABLE_PARTENAIRES = 'Partenaires V2';
 
-// --- 3. CONFIGURATION DES SLUGS WEBFLOW (CORRIGÉ V53) ---
+// --- 3. CONFIGURATION DES SLUGS WEBFLOW (CORRIGÉ V54) ---
+// Règle d'or Webflow : Les slugs de champs sont TOUJOURS en minuscules.
 const SLUGS = {
     // Champs obligatoires
-    nom: 'Name',
-    slug: 'Slug',
+    nom: 'name',
+    slug: 'slug',
     
-    // Champs Custom (Basés sur ton image)
-    // IMPORTANT : Toujours en minuscules, sans accents, avec tirets
+    // Champs Custom (Basés sur ton image, passés en minuscules)
     
-    statut: 'Statut-Vente',        // Corrigé : Minuscule
-    partenaire: 'Partenaire',
-    categorie: 'Catégorie-produit', // Corrigé : "ie" à la fin (français)
+    statut: 'statut-vente',        // Corrigé : Minuscule
+    partenaire: 'partenaire',
+    categorie: 'categorie-produit', // Corrigé : Minuscule
     
-    marque: 'Marque-produit',
-    ref: 'Référence-produit',
-    unite: 'Unité',
+    marque: 'marque-produit',
+    ref: 'reference-produit',
+    unite: 'unite',
     
-    stock_depart: 'Stock-de-départ',
-    stock_restant: 'Stock-restant',
-    info_stock: 'Infos-sup-stock',  // Corrigé : "infos" au pluriel (d'après l'image)
+    stock_depart: 'stock-de-depart',
+    stock_restant: 'stock-restant',
+    info_stock: 'infos-sup-stock',  // Corrigé : Minuscule + Pluriel
     
-    dims: 'Dimensions-du-produit',
-    desc: 'Description',
+    dims: 'dimensions-du-produit',
+    desc: 'description',
     
-    prix_vente: 'Prix-de-vente',
-    prix_neuf: 'Prix-du-neuf',
-    info_prix: 'Info-sup-prix',
-    reduction: 'Pourcentage-reduction',
+    prix_vente: 'prix-de-vente',
+    prix_neuf: 'prix-du-neuf',
+    info_prix: 'info-sup-prix',
+    reduction: 'pourcentage-reduction',
     
-    lien: 'Lien-vers-l-annonce',
+    lien: 'lien-vers-l-annonce',
     
     // Images
-    img_main: 'Image-principale',
-    img_galerie: 'Images-galerie'
+    img_main: 'image-principale',
+    img_galerie: 'images-galerie'
 };
 
 // --- HELPER FUNCTIONS ---
