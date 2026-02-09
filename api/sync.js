@@ -1,9 +1,9 @@
-// Version "Master Sync - V55 SIMPLE PROXY"
-// Suppression de Sharp pour garantir le transfert des images sans erreur 500
+// Version "Master Sync - V56 BUFFER PROXY"
+// Utilisation de ArrayBuffer pour stabiliser l'upload d'images vers Webflow
 
 const Airtable = require('airtable');
 const axios = require('axios');
-// const sharp = require('sharp'); // On désactive Sharp pour l'instant
+// const sharp = require('sharp'); // Toujours désactivé pour simplifier
 
 // --- 1. CONFIGURATION API ---
 const airtableBase = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
@@ -73,24 +73,32 @@ function cleanFields(obj) {
   return obj;
 }
 
-// --- PROXY SIMPLIFIÉ (Sans Sharp) ---
+// --- PROXY ROBUSTE (Mode Buffer) ---
 async function handleProxy(req, res) {
     const imageUrl = req.query.proxy_url;
     if (!imageUrl) return res.status(404).send('No URL provided');
     
     try {
+        // On télécharge l'image complète en mémoire (RAM)
         const response = await axios({
             method: 'get',
             url: decodeURIComponent(imageUrl),
-            responseType: 'stream'
+            responseType: 'arraybuffer', // Crucial : on veut le fichier brut, pas un flux
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' // Pour ne pas être bloqué par Airtable
+            }
         });
         
-        // On passe simplement le stream sans transformation (Passe-plat)
-        // On essaie de récupérer le type de l'image d'origine, sinon jpeg par défaut
+        const buffer = Buffer.from(response.data);
         const contentType = response.headers['content-type'] || 'image/jpeg';
+        const contentLength = buffer.length;
+
+        // On envoie les bons headers à Webflow
         res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Length', contentLength);
         
-        response.data.pipe(res);
+        // On envoie le fichier d'un coup
+        res.status(200).send(buffer);
         
     } catch (error) {
         console.error("Proxy Error:", error.message);
@@ -100,9 +108,12 @@ async function handleProxy(req, res) {
 
 function makeProxyUrl(originalUrl, req) {
     if (!originalUrl) return null;
+    // Gestion robuste du protocole (http/https) pour éviter les erreurs de lien
     const protocol = req.headers['x-forwarded-proto'] || 'https';
     const host = req.headers.host;
-    return `${protocol}://${host}/api/sync?proxy_url=${encodeURIComponent(originalUrl)}`;
+    // On nettoie l'URL pour éviter les doubles slashs bizarres
+    const baseUrl = `${protocol}://${host}`;
+    return `${baseUrl}/api/sync?proxy_url=${encodeURIComponent(originalUrl)}`;
 }
 
 // --- GESTION DES OPTIONS ---
