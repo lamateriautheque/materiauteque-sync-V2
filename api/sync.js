@@ -1,11 +1,11 @@
-// Version "Master Sync - V51 COMPLETE"
-// Tables V2 + Logs Diagnostic + Sharp + Robust Options
+// Version "Master Sync - V53 SLUG CORRECTION"
+// Correction basée sur la capture d'écran CMS (Infos au pluriel, Categorie en français)
 
 const Airtable = require('airtable');
 const axios = require('axios');
 const sharp = require('sharp');
 
-// --- CONFIGURATION ---
+// --- 1. CONFIGURATION API ---
 const airtableBase = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
 
 const webflowClient = axios.create({
@@ -23,11 +23,45 @@ const WF_IDS = {
   partners: process.env.WF_COLLECTION_ID_PARTENAIRES
 };
 
-// --- NOMS DES TABLES (V2) ---
-// Assure-toi que ces noms correspondent EXACTEMENT à tes onglets Airtable
+// --- 2. CONFIGURATION DES TABLES AIRTABLE ---
 const AIRTABLE_TABLE_PRODUITS = 'Gisement V2'; 
 const AIRTABLE_TABLE_PARTENAIRES = 'Partenaires V2';
-const AIRTABLE_TABLE_CATEGORIES = 'Catégories Produits V2';
+
+// --- 3. CONFIGURATION DES SLUGS WEBFLOW (CORRIGÉ V53) ---
+const SLUGS = {
+    // Champs obligatoires
+    nom: 'Name',
+    slug: 'Slug',
+    
+    // Champs Custom (Basés sur ton image)
+    // IMPORTANT : Toujours en minuscules, sans accents, avec tirets
+    
+    statut: 'Statut-Vente',        // Corrigé : Minuscule
+    partenaire: 'Partenaire',
+    categorie: 'Catégorie-produit', // Corrigé : "ie" à la fin (français)
+    
+    marque: 'Marque-produit',
+    ref: 'Référence-produit',
+    unite: 'Unité',
+    
+    stock_depart: 'Stock-de-départ',
+    stock_restant: 'Stock-restant',
+    info_stock: 'Infos-sup-stock',  // Corrigé : "infos" au pluriel (d'après l'image)
+    
+    dims: 'Dimensions-du-produit',
+    desc: 'Description',
+    
+    prix_vente: 'Prix-de-vente',
+    prix_neuf: 'Prix-du-neuf',
+    info_prix: 'Info-sup-prix',
+    reduction: 'Pourcentage-reduction',
+    
+    lien: 'Lien-vers-l-annonce',
+    
+    // Images
+    img_main: 'Image-principale',
+    img_galerie: 'Images-galerie'
+};
 
 // --- HELPER FUNCTIONS ---
 
@@ -51,27 +85,19 @@ function cleanFields(obj) {
   return obj;
 }
 
-// Fonction Proxy pour les images (Redimensionnement + WebP)
 async function handleProxy(req, res) {
     const imageUrl = req.query.proxy_url;
     if (!imageUrl) return res.status(404).send('No URL provided');
-    
     try {
         const response = await axios({
             method: 'get',
             url: decodeURIComponent(imageUrl),
             responseType: 'stream'
         });
-
-        // Pipeline Sharp : Redimensionne à 1600px max et convertit en WebP (Qualité 80)
-        const transform = sharp()
-            .resize({ width: 1600, withoutEnlargement: true })
-            .webp({ quality: 80 });
-
+        const transform = sharp().resize({ width: 1600, withoutEnlargement: true }).webp({ quality: 80 });
         res.setHeader('Content-Type', 'image/webp'); 
         response.data.pipe(transform).pipe(res);
     } catch (error) {
-        console.error("Proxy Error:", error);
         res.status(500).send('Error fetching image');
     }
 }
@@ -83,64 +109,52 @@ function makeProxyUrl(originalUrl, req) {
     return `${protocol}://${host}/api/sync?proxy_url=${encodeURIComponent(originalUrl)}`;
 }
 
-// --- GESTION DES OPTIONS (Statuts, etc.) ---
+// --- GESTION DES OPTIONS ---
 let _collectionSchemaCache = null;
 
 async function getOrAddOptionId(collectionId, fieldSlug, optionName, log) {
     if (!optionName) return null;
-    
     try {
-        // 1. Récupération du schéma
         const res = await webflowClient.get(`/collections/${collectionId}`);
         _collectionSchemaCache = res.data;
 
-        if (!_collectionSchemaCache || !_collectionSchemaCache.fields) {
-             if (log) log(`❌ CRITIQUE : Impossible de lire les champs de la collection.`);
-             return null;
-        }
+        if (!_collectionSchemaCache || !_collectionSchemaCache.fields) return null;
 
         const field = _collectionSchemaCache.fields.find(f => f.slug === fieldSlug);
         
         if (!field) {
-            if (log) log(`⚠️ ERREUR : Le champ "${fieldSlug}" n'existe pas !`);
+            if (log) log(`⚠️ ERREUR : Le champ slug "${fieldSlug}" n'existe pas. Vérifie SLUGS.`);
             return null;
         }
 
-        // Lecture des options
         const currentOptions = field.options || field.validations?.options || [];
         
         let existingOption = currentOptions.find(o => o.name.toLowerCase() === optionName.toLowerCase());
         if (existingOption) return existingOption.id;
 
-        if (log) log(`   ✨ Option '${optionName}' inconnue. Création...`);
-        
+        if (log) log(`   ✨ Création option '${optionName}'...`);
         const newOptions = [...currentOptions, { name: optionName }];
         
-        // PATCH
         await webflowClient.patch(`/collections/${collectionId}/fields/${field.id}`, {
             isRequired: field.isRequired,
             displayName: field.displayName,
             validations: { options: newOptions }
         });
 
-        await delay(2000); // Pause propagation
+        await delay(2000);
 
-        // Re-lecture
         const resUpdated = await webflowClient.get(`/collections/${collectionId}`);
         const updatedField = resUpdated.data.fields.find(f => f.slug === fieldSlug);
         const updatedOptionsList = updatedField.validations?.options || updatedField.options || [];
         const newOptionEntry = updatedOptionsList.find(o => o.name.toLowerCase() === optionName.toLowerCase());
         
         if (newOptionEntry) return newOptionEntry.id;
-        else return null;
-
+        return null;
     } catch (err) {
         if (log) log(`❌ Erreur Option: ${err.message}`);
         return null;
     }
 }
-
-// --- FONCTIONS EXISTANTES ---
 
 async function findOrCreateItem(collectionId, rawName) {
   if (!rawName) return null;
@@ -169,32 +183,21 @@ async function getPartnerName(recordId) {
 // --- MAIN SCRIPT ---
 
 module.exports = async (req, res) => {
-  // Gestion du Proxy Image
   if (req.query.proxy_url) return handleProxy(req, res);
-  
-  // Sécurité
   if (req.query.secret !== process.env.SYNC_SECRET) return res.status(401).json({ error: 'Unauthorized' });
 
   const logs = [];
   const log = (msg) => { console.log(msg); logs.push(msg); };
 
   try {
-    log(`--- DÉBUT DE LA SYNCHRONISATION V2 ---`);
-    log(`Table Produits : "${AIRTABLE_TABLE_PRODUITS}"`);
-    
-    // Récupération Airtable
     const records = await airtableBase(AIRTABLE_TABLE_PRODUITS).select({
       filterByFormula: "OR({Status SYNC} = 'A Publier', {Status SYNC} = 'Mise à jour demandée')",
       maxRecords: 5 
     }).firstPage();
 
-    if (records.length === 0) {
-        log(`Résultat : 0 produit trouvé.`);
-        log(`Conseil : Vérifiez que la colonne "Status SYNC" existe bien dans "${AIRTABLE_TABLE_PRODUITS}" et contient "A Publier".`);
-        return res.status(200).json({ message: 'Rien à synchroniser.', logs: logs });
-    }
+    if (records.length === 0) return res.status(200).json({ message: 'Rien à synchroniser.', logs: logs });
 
-    log(`${records.length} produits trouvés à traiter.`);
+    log(`${records.length} produits trouvés.`);
 
     for (const record of records) {
       const productName = record.get('Nom affiché');
@@ -203,7 +206,6 @@ module.exports = async (req, res) => {
       
       log(`\n🔎 TRAITEMENT : ${productName}`);
 
-      // 1. Partenaire
       let webflowPartnerId = null;
       const partnerLink = record.get('Partenaire');
       if (partnerLink && partnerLink.length > 0) {
@@ -211,7 +213,6 @@ module.exports = async (req, res) => {
            webflowPartnerId = await findOrCreateItem(WF_IDS.partners, pName);
       }
 
-      // 2. Catégories
       const rawCategories = record.get('Category Produit'); 
       let webflowCategoryIds = [];
       if (rawCategories && Array.isArray(rawCategories)) {
@@ -221,53 +222,60 @@ module.exports = async (req, res) => {
           }
       }
 
-      // 3. Statut Vente (Option)
       const statutAirtable = record.get('Statut'); 
       let statutVenteId = null;
       if (statutAirtable) {
           log(`   🔹 Statut : "${statutAirtable}"`);
-          statutVenteId = await getOrAddOptionId(WF_IDS.products, 'statut-vente-2', statutAirtable, log);
+          statutVenteId = await getOrAddOptionId(WF_IDS.products, SLUGS.statut, statutAirtable, log);
       }
 
-      // 4. Images (via Proxy)
       const mainImageAttach = record.get('Image principale');
       const mainImageUrl = (mainImageAttach && mainImageAttach.length > 0) 
           ? makeProxyUrl(mainImageAttach[0].url, req) 
           : null;
-      
       const galleryAttach = record.get('Images galerie') || [];
       const galleryUrls = galleryAttach.map(img => makeProxyUrl(img.url, req));
 
-      // 5. Construction des données
-      let fieldData = {
-          name: productName,
-          slug: baseSlug,
-          'marque-produit': record.get('Marque produit'),
-          'reference-produit': record.get('Référence produit'),
-          'unite': record.get('Unité'), 
-          'stock-de-depart': record.get('Stock de départ'),
-          'stock-restant': record.get('Stock restant'),
-          'info-sup-stock': record.get('Info sup Stock'),
-          'dimensions-du-produit': record.get('Dimensions du produit'),
-          'description': record.get('Description'),
-          'prix-de-vente': record.get('Prix de vente'),
-          'prix-du-neuf': record.get('Prix du neuf'),
-          'info-sup-prix': record.get('Info sup Prix'),
-          'pourcentage-reduction': record.get('Pourcentage réduction')?.toString(),
-          'lien-vers-l-annonce': record.get("Lien vers l'annonce"),
-          'partenaire': webflowPartnerId,
-          'category-produit': webflowCategoryIds.length > 0 ? webflowCategoryIds : null, 
-          'image-principale': mainImageUrl, 
-          'images-galerie': galleryUrls.length > 0 ? galleryUrls : null,
-          'statut-vente-2': statutVenteId
-      };
+      // Construction dynamique
+      let fieldData = {};
       
+      fieldData[SLUGS.nom] = productName;
+      fieldData[SLUGS.slug] = baseSlug;
+      fieldData[SLUGS.marque] = record.get('Marque produit');
+      fieldData[SLUGS.ref] = record.get('Référence produit');
+      fieldData[SLUGS.unite] = record.get('Unité');
+      fieldData[SLUGS.stock_depart] = record.get('Stock de départ');
+      fieldData[SLUGS.stock_restant] = record.get('Stock restant');
+      
+      // Attention : Slug corrigé pour Infos (pluriel)
+      fieldData[SLUGS.info_stock] = record.get('Info sup Stock');
+      
+      fieldData[SLUGS.dims] = record.get('Dimensions du produit');
+      fieldData[SLUGS.desc] = record.get('Description');
+      fieldData[SLUGS.prix_vente] = record.get('Prix de vente');
+      fieldData[SLUGS.prix_neuf] = record.get('Prix du neuf');
+      fieldData[SLUGS.info_prix] = record.get('Info sup Prix');
+      fieldData[SLUGS.reduction] = record.get('Pourcentage réduction')?.toString();
+      fieldData[SLUGS.lien] = record.get("Lien vers l'annonce");
+      
+      fieldData[SLUGS.partenaire] = webflowPartnerId;
+      
+      if (webflowCategoryIds.length > 0) {
+          fieldData[SLUGS.categorie] = webflowCategoryIds;
+      }
+      
+      fieldData[SLUGS.img_main] = mainImageUrl;
+      if (galleryUrls.length > 0) {
+          fieldData[SLUGS.img_galerie] = galleryUrls;
+      }
+      
+      fieldData[SLUGS.statut] = statutVenteId;
+
       fieldData = cleanFields(fieldData);
       
       const keysUpdated = Object.keys(fieldData).join(', ');
       log(`   📝 Champs prêts : [${keysUpdated}]`);
 
-      // 6. Envoi Webflow
       let itemId = webflowId;
 
       try {
@@ -299,7 +307,6 @@ module.exports = async (req, res) => {
               }
           }
 
-          // 7. Update Airtable
           await airtableBase(AIRTABLE_TABLE_PRODUITS).update(record.id, {
             "Status SYNC": "Publié",
             "Webflow item ID": itemId,
