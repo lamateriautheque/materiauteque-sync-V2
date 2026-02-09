@@ -1,9 +1,9 @@
-// Version "Master Sync - V54 LOWERCASE FIX"
-// Correction critique : Tous les Slugs Webflow doivent être en minuscules strictes
+// Version "Master Sync - V55 SIMPLE PROXY"
+// Suppression de Sharp pour garantir le transfert des images sans erreur 500
 
 const Airtable = require('airtable');
 const axios = require('axios');
-const sharp = require('sharp');
+// const sharp = require('sharp'); // On désactive Sharp pour l'instant
 
 // --- 1. CONFIGURATION API ---
 const airtableBase = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
@@ -27,38 +27,26 @@ const WF_IDS = {
 const AIRTABLE_TABLE_PRODUITS = 'Gisement V2'; 
 const AIRTABLE_TABLE_PARTENAIRES = 'Partenaires V2';
 
-// --- 3. CONFIGURATION DES SLUGS WEBFLOW (CORRIGÉ V54) ---
-// Règle d'or Webflow : Les slugs de champs sont TOUJOURS en minuscules.
+// --- 3. CONFIGURATION DES SLUGS WEBFLOW ---
 const SLUGS = {
-    // Champs obligatoires
     nom: 'name',
     slug: 'slug',
-    
-    // Champs Custom (Basés sur ton image, passés en minuscules)
-    
-    statut: 'statut-vente',        // Corrigé : Minuscule
+    statut: 'statut-vente',        
     partenaire: 'partenaire',
-    categorie: 'categorie-produit', // Corrigé : Minuscule
-    
+    categorie: 'categorie-produit', 
     marque: 'marque-produit',
     ref: 'reference-produit',
     unite: 'unite',
-    
     stock_depart: 'stock-de-depart',
     stock_restant: 'stock-restant',
-    info_stock: 'infos-sup-stock',  // Corrigé : Minuscule + Pluriel
-    
+    info_stock: 'infos-sup-stock',  
     dims: 'dimensions-du-produit',
     desc: 'description',
-    
     prix_vente: 'prix-de-vente',
     prix_neuf: 'prix-du-neuf',
     info_prix: 'info-sup-prix',
     reduction: 'pourcentage-reduction',
-    
     lien: 'lien-vers-l-annonce',
-    
-    // Images
     img_main: 'image-principale',
     img_galerie: 'images-galerie'
 };
@@ -85,19 +73,27 @@ function cleanFields(obj) {
   return obj;
 }
 
+// --- PROXY SIMPLIFIÉ (Sans Sharp) ---
 async function handleProxy(req, res) {
     const imageUrl = req.query.proxy_url;
     if (!imageUrl) return res.status(404).send('No URL provided');
+    
     try {
         const response = await axios({
             method: 'get',
             url: decodeURIComponent(imageUrl),
             responseType: 'stream'
         });
-        const transform = sharp().resize({ width: 1600, withoutEnlargement: true }).webp({ quality: 80 });
-        res.setHeader('Content-Type', 'image/webp'); 
-        response.data.pipe(transform).pipe(res);
+        
+        // On passe simplement le stream sans transformation (Passe-plat)
+        // On essaie de récupérer le type de l'image d'origine, sinon jpeg par défaut
+        const contentType = response.headers['content-type'] || 'image/jpeg';
+        res.setHeader('Content-Type', contentType);
+        
+        response.data.pipe(res);
+        
     } catch (error) {
+        console.error("Proxy Error:", error.message);
         res.status(500).send('Error fetching image');
     }
 }
@@ -123,7 +119,7 @@ async function getOrAddOptionId(collectionId, fieldSlug, optionName, log) {
         const field = _collectionSchemaCache.fields.find(f => f.slug === fieldSlug);
         
         if (!field) {
-            if (log) log(`⚠️ ERREUR : Le champ slug "${fieldSlug}" n'existe pas. Vérifie SLUGS.`);
+            if (log) log(`⚠️ ERREUR : Le champ slug "${fieldSlug}" n'existe pas.`);
             return null;
         }
 
@@ -236,7 +232,6 @@ module.exports = async (req, res) => {
       const galleryAttach = record.get('Images galerie') || [];
       const galleryUrls = galleryAttach.map(img => makeProxyUrl(img.url, req));
 
-      // Construction dynamique
       let fieldData = {};
       
       fieldData[SLUGS.nom] = productName;
@@ -246,10 +241,7 @@ module.exports = async (req, res) => {
       fieldData[SLUGS.unite] = record.get('Unité');
       fieldData[SLUGS.stock_depart] = record.get('Stock de départ');
       fieldData[SLUGS.stock_restant] = record.get('Stock restant');
-      
-      // Attention : Slug corrigé pour Infos (pluriel)
       fieldData[SLUGS.info_stock] = record.get('Info sup Stock');
-      
       fieldData[SLUGS.dims] = record.get('Dimensions du produit');
       fieldData[SLUGS.desc] = record.get('Description');
       fieldData[SLUGS.prix_vente] = record.get('Prix de vente');
