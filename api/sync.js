@@ -1,9 +1,10 @@
-// Version "Master Sync - V56 BUFFER PROXY"
-// Utilisation de ArrayBuffer pour stabiliser l'upload d'images vers Webflow
+// Version "Master Sync - V57 SHARP PROXY"
+// Réactivation de la compression (Sharp) pour éviter les Timeouts Webflow
+// Correction des Slugs basée sur tes captures d'écran
 
 const Airtable = require('airtable');
 const axios = require('axios');
-// const sharp = require('sharp'); // Toujours désactivé pour simplifier
+const sharp = require('sharp'); // On réutilise Sharp pour alléger les images
 
 // --- 1. CONFIGURATION API ---
 const airtableBase = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
@@ -27,7 +28,7 @@ const WF_IDS = {
 const AIRTABLE_TABLE_PRODUITS = 'Gisement V2'; 
 const AIRTABLE_TABLE_PARTENAIRES = 'Partenaires V2';
 
-// --- 3. CONFIGURATION DES SLUGS WEBFLOW ---
+// --- 3. CONFIGURATION DES SLUGS WEBFLOW (V53 Validée) ---
 const SLUGS = {
     nom: 'name',
     slug: 'slug',
@@ -73,47 +74,48 @@ function cleanFields(obj) {
   return obj;
 }
 
-// --- PROXY ROBUSTE (Mode Buffer) ---
+// --- PROXY OPTIMISÉ (Sharp + Buffer) ---
 async function handleProxy(req, res) {
     const imageUrl = req.query.proxy_url;
     if (!imageUrl) return res.status(404).send('No URL provided');
     
     try {
-        // On télécharge l'image complète en mémoire (RAM)
+        // 1. Téléchargement de l'image source (Airtable)
         const response = await axios({
             method: 'get',
             url: decodeURIComponent(imageUrl),
-            responseType: 'arraybuffer', // Crucial : on veut le fichier brut, pas un flux
+            responseType: 'arraybuffer', // On récupère tout le fichier en mémoire
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' // Pour ne pas être bloqué par Airtable
+                'User-Agent': 'Mozilla/5.0' // Pour éviter les blocages
             }
         });
         
-        const buffer = Buffer.from(response.data);
-        const contentType = response.headers['content-type'] || 'image/jpeg';
-        const contentLength = buffer.length;
+        // 2. Traitement avec Sharp (Redim + Conversion WebP)
+        // Cela réduit le poids drastiquement et évite les erreurs de format
+        const optimizedBuffer = await sharp(response.data)
+            .resize({ width: 1600, withoutEnlargement: true }) // Max 1600px de large
+            .webp({ quality: 80 }) // Conversion WebP (Léger et compatible Webflow)
+            .toBuffer();
 
-        // On envoie les bons headers à Webflow
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Content-Length', contentLength);
+        // 3. Envoi à Webflow avec les bons headers
+        res.setHeader('Content-Type', 'image/webp');
+        res.setHeader('Content-Length', optimizedBuffer.length);
+        res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache 24h
         
-        // On envoie le fichier d'un coup
-        res.status(200).send(buffer);
+        res.status(200).send(optimizedBuffer);
         
     } catch (error) {
         console.error("Proxy Error:", error.message);
-        res.status(500).send('Error fetching image');
+        // En cas d'erreur de traitement, on renvoie une 500 pour que Webflow sache qu'il y a un souci
+        res.status(500).send('Error processing image');
     }
 }
 
 function makeProxyUrl(originalUrl, req) {
     if (!originalUrl) return null;
-    // Gestion robuste du protocole (http/https) pour éviter les erreurs de lien
     const protocol = req.headers['x-forwarded-proto'] || 'https';
     const host = req.headers.host;
-    // On nettoie l'URL pour éviter les doubles slashs bizarres
-    const baseUrl = `${protocol}://${host}`;
-    return `${baseUrl}/api/sync?proxy_url=${encodeURIComponent(originalUrl)}`;
+    return `${protocol}://${host}/api/sync?proxy_url=${encodeURIComponent(originalUrl)}`;
 }
 
 // --- GESTION DES OPTIONS ---
