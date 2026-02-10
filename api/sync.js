@@ -1,10 +1,9 @@
-// Version "Master Sync - V63 SHARP STREAM"
-// Retour à la méthode V49 (Compression Sharp) indispensable pour passer les limites de taille Vercel
-// Synchro 1 par 1 conservée
+// Version "Master Sync - V67 DIRECT LINK"
+// Tentative de connexion directe Airtable -> Webflow sans passer par le Proxy Vercel
+// Objectif : Éliminer les erreurs de Timeout/Mémoire du serveur intermédiaire
 
 const Airtable = require('airtable');
 const axios = require('axios');
-const sharp = require('sharp'); // Réactivation de Sharp (Le package.json est prêt)
 
 // --- 1. CONFIGURATION API ---
 const airtableBase = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
@@ -34,7 +33,7 @@ const SLUGS = {
     slug: 'slug',
     statut: 'statut-vente',        
     partenaire: 'partenaire',
-    categorie: 'categorie-produit',
+    categorie: 'categorie-produit', 
     marque: 'marque-produit',
     ref: 'reference-produit',
     unite: 'unite',
@@ -60,9 +59,7 @@ function slugify(text) {
   if (!text) return '';
   return text.toString().toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, '-').replace(/&/g, '-et-')
-    .replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-')
-    .replace(/^-+/, '').replace(/-+$/, '');
+    .replace(/\s+/g, '-').replace(/[^a-z0-9\-]/g, '');
 }
 
 function cleanFields(obj) {
@@ -74,48 +71,6 @@ function cleanFields(obj) {
   return obj;
 }
 
-// --- PROXY V49 (SHARP + STREAM) ---
-// C'est la seule méthode capable de passer des images lourdes sur Vercel Hobby
-async function handleProxy(req, res) {
-    const imageUrl = req.query.proxy_url;
-    if (!imageUrl) return res.status(404).send('No URL provided');
-    
-    try {
-        // 1. Récupération du flux depuis Airtable
-        const response = await axios({
-            method: 'get',
-            url: decodeURIComponent(imageUrl),
-            responseType: 'stream'
-        });
-
-        // 2. Compression à la volée avec Sharp
-        // Redimensionne à 1600px et convertit en WebP pour réduire le poids drastiquement
-        const transform = sharp()
-            .resize({ 
-                width: 1600, 
-                withoutEnlargement: true 
-            })
-            .webp({ quality: 80 });
-
-        // 3. Header
-        res.setHeader('Content-Type', 'image/webp'); 
-        
-        // 4. Tuyau : Airtable -> Sharp -> Webflow
-        response.data.pipe(transform).pipe(res);
-        
-    } catch (error) {
-        console.error("Proxy Error:", error);
-        res.status(500).send('Error fetching image');
-    }
-}
-
-function makeProxyUrl(originalUrl, req) {
-    if (!originalUrl) return null;
-    const protocol = req.headers['x-forwarded-proto'] || 'https';
-    const host = req.headers.host;
-    return `${protocol}://${host}/api/sync?proxy_url=${encodeURIComponent(originalUrl)}`;
-}
-
 // --- GESTION DES OPTIONS ---
 let _collectionSchemaCache = null;
 
@@ -124,43 +79,23 @@ async function getOrAddOptionId(collectionId, fieldSlug, optionName, log) {
     try {
         const res = await webflowClient.get(`/collections/${collectionId}`);
         _collectionSchemaCache = res.data;
-
         if (!_collectionSchemaCache || !_collectionSchemaCache.fields) return null;
-
         const field = _collectionSchemaCache.fields.find(f => f.slug === fieldSlug);
-        
-        if (!field) {
-            if (log) log(`⚠️ ERREUR : Le champ slug "${fieldSlug}" n'existe pas.`);
-            return null;
-        }
-
+        if (!field) return null;
         const currentOptions = field.options || field.validations?.options || [];
-        
         let existingOption = currentOptions.find(o => o.name.toLowerCase() === optionName.toLowerCase());
         if (existingOption) return existingOption.id;
-
-        if (log) log(`   ✨ Création option '${optionName}'...`);
         const newOptions = [...currentOptions, { name: optionName }];
-        
         await webflowClient.patch(`/collections/${collectionId}/fields/${field.id}`, {
-            isRequired: field.isRequired,
-            displayName: field.displayName,
-            validations: { options: newOptions }
+            isRequired: field.isRequired, displayName: field.displayName, validations: { options: newOptions }
         });
-
         await delay(2000);
-
         const resUpdated = await webflowClient.get(`/collections/${collectionId}`);
         const updatedField = resUpdated.data.fields.find(f => f.slug === fieldSlug);
         const updatedOptionsList = updatedField.validations?.options || updatedField.options || [];
         const newOptionEntry = updatedOptionsList.find(o => o.name.toLowerCase() === optionName.toLowerCase());
-        
-        if (newOptionEntry) return newOptionEntry.id;
-        return null;
-    } catch (err) {
-        if (log) log(`❌ Erreur Option: ${err.message}`);
-        return null;
-    }
+        return newOptionEntry ? newOptionEntry.id : null;
+    } catch (err) { return null; }
 }
 
 async function findOrCreateItem(collectionId, rawName) {
@@ -168,11 +103,9 @@ async function findOrCreateItem(collectionId, rawName) {
   const name = rawName.toString().trim();
   try {
     const response = await webflowClient.get(`/collections/${collectionId}/items?limit=100`);
-    const items = response.data.items || [];
-    const match = items.find(i => i.fieldData && i.fieldData.name && i.fieldData.name.toLowerCase() === name.toLowerCase());
+    const match = (response.data.items || []).find(i => i.fieldData.name.toLowerCase() === name.toLowerCase());
     if (match) return match.id;
-    
-    const createResponse = await webflowClient.post(`/collections/${collectionId}/items`, {
+    const createRes = await webflowClient.post(`/collections/${collectionId}/items`, {
       isArchived: false, isDraft: false, fieldData: { name: name, slug: slugify(name) }
     });
     return createResponse.data.id;
@@ -190,7 +123,7 @@ async function getPartnerName(recordId) {
 // --- MAIN SCRIPT ---
 
 module.exports = async (req, res) => {
-  if (req.query.proxy_url) return handleProxy(req, res);
+  // Plus de gestion de proxy_url ici
   if (req.query.secret !== process.env.SYNC_SECRET) return res.status(401).json({ error: 'Unauthorized' });
 
   const logs = [];
@@ -199,7 +132,7 @@ module.exports = async (req, res) => {
   try {
     const records = await airtableBase(AIRTABLE_TABLE_PRODUITS).select({
       filterByFormula: "OR({Status SYNC} = 'A Publier', {Status SYNC} = 'Mise à jour demandée')",
-      maxRecords: 1 // MODIFIÉ : 1 produit à la fois pour éviter les Timeouts
+      maxRecords: 5 
     }).firstPage();
 
     if (records.length === 0) return res.status(200).json({ message: 'Rien à synchroniser.', logs: logs });
@@ -232,18 +165,22 @@ module.exports = async (req, res) => {
       const statutAirtable = record.get('Statut'); 
       let statutVenteId = null;
       if (statutAirtable) {
-          log(`   🔹 Statut : "${statutAirtable}"`);
           statutVenteId = await getOrAddOptionId(WF_IDS.products, SLUGS.statut, statutAirtable, log);
       }
 
+      // --- MODIFICATION V67 : LIENS DIRECTS AIRTABLE ---
+      // On prend l'URL directe (elle dure quelques heures, suffisant pour l'import)
+      
       const mainImageAttach = record.get('Image principale');
       const mainImageUrl = (mainImageAttach && mainImageAttach.length > 0) 
-          ? makeProxyUrl(mainImageAttach[0].url, req) 
+          ? mainImageAttach[0].url // DIRECT URL
           : null;
+      
       const galleryAttach = record.get('Images galerie') || [];
-      const galleryUrls = galleryAttach.map(img => makeProxyUrl(img.url, req));
+      const galleryUrls = galleryAttach.map(img => img.url); // DIRECT URL
 
-      // Construction des données avec le Mapping V54
+      if (mainImageUrl) log(`   📸 Image URL (Direct): ${mainImageUrl.substring(0, 30)}...`);
+
       let fieldData = {};
       fieldData[SLUGS.nom] = productName;
       fieldData[SLUGS.slug] = baseSlug;
@@ -262,23 +199,13 @@ module.exports = async (req, res) => {
       fieldData[SLUGS.lien] = record.get("Lien vers l'annonce");
       
       fieldData[SLUGS.partenaire] = webflowPartnerId;
-      
-      if (webflowCategoryIds.length > 0) {
-          fieldData[SLUGS.categorie] = webflowCategoryIds;
-      }
-      
+      if (webflowCategoryIds.length > 0) fieldData[SLUGS.categorie] = webflowCategoryIds;
       fieldData[SLUGS.img_main] = mainImageUrl;
-      if (galleryUrls.length > 0) {
-          fieldData[SLUGS.img_galerie] = galleryUrls;
-      }
-      
+      if (galleryUrls.length > 0) fieldData[SLUGS.img_galerie] = galleryUrls;
       fieldData[SLUGS.statut] = statutVenteId;
 
       fieldData = cleanFields(fieldData);
       
-      const keysUpdated = Object.keys(fieldData).join(', ');
-      log(`   📝 Champs prêts : [${keysUpdated}]`);
-
       let itemId = webflowId;
 
       try {
@@ -298,7 +225,7 @@ module.exports = async (req, res) => {
                   log(`   ✅ SUCCÈS.`);
               } catch (updateErr) {
                   if (updateErr.response && updateErr.response.data && updateErr.response.data.code === 'resource_not_found') {
-                      log("   ⚠️ Item introuvable (404). Auto-réparation : Recréation...");
+                      log("   ⚠️ Item introuvable. Recréation...");
                       const createRes = await webflowClient.post(`/collections/${WF_IDS.products}/items`, {
                           isArchived: false, isDraft: false, fieldData: fieldData
                       });
