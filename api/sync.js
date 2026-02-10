@@ -1,10 +1,10 @@
-// Version "Master Sync - V57 SHARP PROXY"
-// Réactivation de la compression (Sharp) pour éviter les Timeouts Webflow
-// Correction des Slugs basée sur tes captures d'écran
+// Version "Master Sync - V58 STREAM PROXY"
+// Retour au Stream direct (sans Sharp) pour éviter les Timeouts et dépassements de mémoire RAM
+// Correction des Slugs V53 conservée
 
 const Airtable = require('airtable');
 const axios = require('axios');
-const sharp = require('sharp'); // On réutilise Sharp pour alléger les images
+// const sharp = require('sharp'); // Désactivé pour alléger le processus
 
 // --- 1. CONFIGURATION API ---
 const airtableBase = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
@@ -74,40 +74,34 @@ function cleanFields(obj) {
   return obj;
 }
 
-// --- PROXY OPTIMISÉ (Sharp + Buffer) ---
+// --- PROXY "TUYAU DIRECT" (Stream) ---
+// Plus léger, plus rapide, pas de traitement d'image
 async function handleProxy(req, res) {
     const imageUrl = req.query.proxy_url;
     if (!imageUrl) return res.status(404).send('No URL provided');
     
     try {
-        // 1. Téléchargement de l'image source (Airtable)
         const response = await axios({
             method: 'get',
             url: decodeURIComponent(imageUrl),
-            responseType: 'arraybuffer', // On récupère tout le fichier en mémoire
+            responseType: 'stream', // On garde le flux ouvert
             headers: {
-                'User-Agent': 'Mozilla/5.0' // Pour éviter les blocages
+                'User-Agent': 'Mozilla/5.0' // On se fait passer pour un navigateur
             }
         });
         
-        // 2. Traitement avec Sharp (Redim + Conversion WebP)
-        // Cela réduit le poids drastiquement et évite les erreurs de format
-        const optimizedBuffer = await sharp(response.data)
-            .resize({ width: 1600, withoutEnlargement: true }) // Max 1600px de large
-            .webp({ quality: 80 }) // Conversion WebP (Léger et compatible Webflow)
-            .toBuffer();
-
-        // 3. Envoi à Webflow avec les bons headers
-        res.setHeader('Content-Type', 'image/webp');
-        res.setHeader('Content-Length', optimizedBuffer.length);
-        res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache 24h
+        // On récupère le type de fichier original (jpeg, png...)
+        const contentType = response.headers['content-type'];
+        if (contentType) {
+            res.setHeader('Content-Type', contentType);
+        }
         
-        res.status(200).send(optimizedBuffer);
+        // On branche le tuyau : Airtable -> Script -> Webflow
+        response.data.pipe(res);
         
     } catch (error) {
         console.error("Proxy Error:", error.message);
-        // En cas d'erreur de traitement, on renvoie une 500 pour que Webflow sache qu'il y a un souci
-        res.status(500).send('Error processing image');
+        res.status(500).send('Error piping image');
     }
 }
 
