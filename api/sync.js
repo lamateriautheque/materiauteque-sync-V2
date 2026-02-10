@@ -1,10 +1,9 @@
-// Version "Master Sync - V58 STREAM PROXY"
-// Retour au Stream direct (sans Sharp) pour éviter les Timeouts et dépassements de mémoire RAM
-// Correction des Slugs V53 conservée
+// Version "Master Sync - V59 COMPACT PROXY"
+// Force la compression des images pour passer sous la limite de 4.5MB de Vercel
 
 const Airtable = require('airtable');
 const axios = require('axios');
-// const sharp = require('sharp'); // Désactivé pour alléger le processus
+const sharp = require('sharp'); // Réactivé pour la compression indispensable
 
 // --- 1. CONFIGURATION API ---
 const airtableBase = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
@@ -74,34 +73,38 @@ function cleanFields(obj) {
   return obj;
 }
 
-// --- PROXY "TUYAU DIRECT" (Stream) ---
-// Plus léger, plus rapide, pas de traitement d'image
+// --- PROXY COMPACTEUR (V59) ---
 async function handleProxy(req, res) {
     const imageUrl = req.query.proxy_url;
     if (!imageUrl) return res.status(404).send('No URL provided');
     
     try {
+        // 1. Télécharger l'image brute depuis Airtable
         const response = await axios({
             method: 'get',
             url: decodeURIComponent(imageUrl),
-            responseType: 'stream', // On garde le flux ouvert
+            responseType: 'arraybuffer', // On prend tout en mémoire
             headers: {
-                'User-Agent': 'Mozilla/5.0' // On se fait passer pour un navigateur
+                'User-Agent': 'Mozilla/5.0'
             }
         });
         
-        // On récupère le type de fichier original (jpeg, png...)
-        const contentType = response.headers['content-type'];
-        if (contentType) {
-            res.setHeader('Content-Type', contentType);
-        }
-        
-        // On branche le tuyau : Airtable -> Script -> Webflow
-        response.data.pipe(res);
+        // 2. COMPRESSION AGRESSIVE
+        // Objectif : Passer sous la barre des 4.5MB de Vercel
+        const optimizedBuffer = await sharp(response.data)
+            .resize({ width: 1200, withoutEnlargement: true }) // Max 1200px
+            .jpeg({ quality: 80, mozjpeg: true }) // JPEG optimisé (plus compatible que WebP parfois)
+            .toBuffer();
+
+        // 3. Envoi à Webflow
+        res.setHeader('Content-Type', 'image/jpeg');
+        res.setHeader('Content-Length', optimizedBuffer.length);
+        res.status(200).send(optimizedBuffer);
         
     } catch (error) {
         console.error("Proxy Error:", error.message);
-        res.status(500).send('Error piping image');
+        // Si ça plante, on renvoie une erreur explicite
+        res.status(500).send('Image processing failed');
     }
 }
 
