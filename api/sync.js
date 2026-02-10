@@ -199,7 +199,7 @@ module.exports = async (req, res) => {
   try {
     const records = await airtableBase(AIRTABLE_TABLE_PRODUITS).select({
       filterByFormula: "OR({Status SYNC} = 'A Publier', {Status SYNC} = 'Mise à jour demandée')",
-      maxRecords: 5 
+      maxRecords: 1 
     }).firstPage();
 
     if (records.length === 0) return res.status(200).json({ message: 'Rien à synchroniser.', logs: logs });
