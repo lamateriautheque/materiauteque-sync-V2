@@ -1,10 +1,10 @@
-// Version "Master Sync - V62 BUFFER SINGLE"
-// 1. Synchro 1 produit par 1 produit pour éviter les timeouts
-// 2. Gestion des images via Buffer (Mémoire) + User-Agent pour garantir le téléchargement
+// Version "Master Sync - V63 SHARP STREAM"
+// Retour à la méthode V49 (Compression Sharp) indispensable pour passer les limites de taille Vercel
+// Synchro 1 par 1 conservée
 
 const Airtable = require('airtable');
 const axios = require('axios');
-// On n'utilise pas Sharp ici pour éviter tout bug de traitement d'image
+const sharp = require('sharp'); // Réactivation de Sharp (Le package.json est prêt)
 
 // --- 1. CONFIGURATION API ---
 const airtableBase = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
@@ -74,38 +74,37 @@ function cleanFields(obj) {
   return obj;
 }
 
-// --- PROXY "BUFFER" (V62) ---
-// Télécharge tout le fichier en mémoire avant envoi pour calculer le Content-Length
+// --- PROXY V49 (SHARP + STREAM) ---
+// C'est la seule méthode capable de passer des images lourdes sur Vercel Hobby
 async function handleProxy(req, res) {
     const imageUrl = req.query.proxy_url;
     if (!imageUrl) return res.status(404).send('No URL provided');
     
     try {
+        // 1. Récupération du flux depuis Airtable
         const response = await axios({
             method: 'get',
             url: decodeURIComponent(imageUrl),
-            responseType: 'arraybuffer', // On veut le fichier binaire complet
-            headers: {
-                // Important : Se faire passer pour un navigateur pour qu'Airtable ne bloque pas
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
+            responseType: 'stream'
         });
+
+        // 2. Compression à la volée avec Sharp
+        // Redimensionne à 1600px et convertit en WebP pour réduire le poids drastiquement
+        const transform = sharp()
+            .resize({ 
+                width: 1600, 
+                withoutEnlargement: true 
+            })
+            .webp({ quality: 80 });
+
+        // 3. Header
+        res.setHeader('Content-Type', 'image/webp'); 
         
-        // On prépare le buffer
-        const buffer = Buffer.from(response.data);
-        
-        // On récupère ou devine le type mime
-        const contentType = response.headers['content-type'] || 'image/jpeg';
-        
-        // On envoie les headers précis à Webflow
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Content-Length', buffer.length); // Webflow aime savoir la taille
-        
-        // Envoi du fichier
-        res.status(200).send(buffer);
+        // 4. Tuyau : Airtable -> Sharp -> Webflow
+        response.data.pipe(transform).pipe(res);
         
     } catch (error) {
-        console.error("Proxy Error:", error.message);
+        console.error("Proxy Error:", error);
         res.status(500).send('Error fetching image');
     }
 }
