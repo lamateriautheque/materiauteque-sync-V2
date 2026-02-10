@@ -1,6 +1,6 @@
-// Version "Master Sync - V61 SIMPLE"
-// Retour à la gestion d'images "Native" (Sans Sharp) pour garantir le transfert
-// Configuration des Slugs V54 conservée pour le nouveau site
+// Version "Master Sync - V62 BUFFER SINGLE"
+// 1. Synchro 1 produit par 1 produit pour éviter les timeouts
+// 2. Gestion des images via Buffer (Mémoire) + User-Agent pour garantir le téléchargement
 
 const Airtable = require('airtable');
 const axios = require('axios');
@@ -74,8 +74,8 @@ function cleanFields(obj) {
   return obj;
 }
 
-// --- PROXY "ORIGINAL" (V1 - Sans Sharp) ---
-// C'est le code le plus simple qui marchait au tout début.
+// --- PROXY "BUFFER" (V62) ---
+// Télécharge tout le fichier en mémoire avant envoi pour calculer le Content-Length
 async function handleProxy(req, res) {
     const imageUrl = req.query.proxy_url;
     if (!imageUrl) return res.status(404).send('No URL provided');
@@ -84,12 +84,25 @@ async function handleProxy(req, res) {
         const response = await axios({
             method: 'get',
             url: decodeURIComponent(imageUrl),
-            responseType: 'stream'
+            responseType: 'arraybuffer', // On veut le fichier binaire complet
+            headers: {
+                // Important : Se faire passer pour un navigateur pour qu'Airtable ne bloque pas
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
         });
         
-        // On renvoie l'image brute en JPEG (format par défaut d'Airtable)
-        res.setHeader('Content-Type', 'image/jpeg'); 
-        response.data.pipe(res);
+        // On prépare le buffer
+        const buffer = Buffer.from(response.data);
+        
+        // On récupère ou devine le type mime
+        const contentType = response.headers['content-type'] || 'image/jpeg';
+        
+        // On envoie les headers précis à Webflow
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Length', buffer.length); // Webflow aime savoir la taille
+        
+        // Envoi du fichier
+        res.status(200).send(buffer);
         
     } catch (error) {
         console.error("Proxy Error:", error.message);
@@ -187,7 +200,7 @@ module.exports = async (req, res) => {
   try {
     const records = await airtableBase(AIRTABLE_TABLE_PRODUITS).select({
       filterByFormula: "OR({Status SYNC} = 'A Publier', {Status SYNC} = 'Mise à jour demandée')",
-      maxRecords: 5 
+      maxRecords: 1 // MODIFIÉ : 1 produit à la fois pour éviter les Timeouts
     }).firstPage();
 
     if (records.length === 0) return res.status(200).json({ message: 'Rien à synchroniser.', logs: logs });
