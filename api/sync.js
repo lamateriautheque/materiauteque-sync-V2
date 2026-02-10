@@ -1,11 +1,10 @@
-// Version "Master Sync - V60 HYBRID"
-// Le meilleur des deux mondes : 
-// - Proxy Image V49 (Sharp + Stream) qui fonctionnait
-// - Mapping V54 (Slugs corrigés) pour le nouveau site
+// Version "Master Sync - V61 SIMPLE"
+// Retour à la gestion d'images "Native" (Sans Sharp) pour garantir le transfert
+// Configuration des Slugs V54 conservée pour le nouveau site
 
 const Airtable = require('airtable');
 const axios = require('axios');
-const sharp = require('sharp'); // On utilise Sharp car ton package.json est prêt
+// On n'utilise pas Sharp ici pour éviter tout bug de traitement d'image
 
 // --- 1. CONFIGURATION API ---
 const airtableBase = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
@@ -29,19 +28,19 @@ const WF_IDS = {
 const AIRTABLE_TABLE_PRODUITS = 'Gisement V2'; 
 const AIRTABLE_TABLE_PARTENAIRES = 'Partenaires V2';
 
-// --- 3. CONFIGURATION DES SLUGS WEBFLOW (Validés en V53/54) ---
+// --- 3. CONFIGURATION DES SLUGS WEBFLOW ---
 const SLUGS = {
     nom: 'name',
     slug: 'slug',
     statut: 'statut-vente',        
     partenaire: 'partenaire',
-    categorie: 'categorie-produit', // "ie" à la fin
+    categorie: 'categorie-produit',
     marque: 'marque-produit',
     ref: 'reference-produit',
     unite: 'unite',
     stock_depart: 'stock-de-depart',
     stock_restant: 'stock-restant',
-    info_stock: 'infos-sup-stock',  // Pluriel "infos"
+    info_stock: 'infos-sup-stock',  
     dims: 'dimensions-du-produit',
     desc: 'description',
     prix_vente: 'prix-de-vente',
@@ -75,36 +74,25 @@ function cleanFields(obj) {
   return obj;
 }
 
-// --- PROXY V49 (SHARP + STREAM) ---
-// C'est la méthode qui fonctionnait pour toi
+// --- PROXY "ORIGINAL" (V1 - Sans Sharp) ---
+// C'est le code le plus simple qui marchait au tout début.
 async function handleProxy(req, res) {
     const imageUrl = req.query.proxy_url;
     if (!imageUrl) return res.status(404).send('No URL provided');
     
     try {
-        // 1. Récupération du flux
         const response = await axios({
             method: 'get',
             url: decodeURIComponent(imageUrl),
             responseType: 'stream'
         });
-
-        // 2. Traitement Sharp à la volée (Redim + WebP)
-        const transform = sharp()
-            .resize({ 
-                width: 1600, // Largeur max
-                withoutEnlargement: true 
-            })
-            .webp({ quality: 80 }); // Optimisation
-
-        // 3. Header
-        res.setHeader('Content-Type', 'image/webp'); 
         
-        // 4. Tuyau : Source -> Sharp -> Webflow
-        response.data.pipe(transform).pipe(res);
+        // On renvoie l'image brute en JPEG (format par défaut d'Airtable)
+        res.setHeader('Content-Type', 'image/jpeg'); 
+        response.data.pipe(res);
         
     } catch (error) {
-        console.error("Proxy Error:", error);
+        console.error("Proxy Error:", error.message);
         res.status(500).send('Error fetching image');
     }
 }
@@ -199,7 +187,7 @@ module.exports = async (req, res) => {
   try {
     const records = await airtableBase(AIRTABLE_TABLE_PRODUITS).select({
       filterByFormula: "OR({Status SYNC} = 'A Publier', {Status SYNC} = 'Mise à jour demandée')",
-      maxRecords: 1 
+      maxRecords: 5 
     }).firstPage();
 
     if (records.length === 0) return res.status(200).json({ message: 'Rien à synchroniser.', logs: logs });
