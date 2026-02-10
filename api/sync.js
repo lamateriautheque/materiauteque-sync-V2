@@ -1,9 +1,11 @@
-// Version "Master Sync - V59 COMPACT PROXY"
-// Force la compression des images pour passer sous la limite de 4.5MB de Vercel
+// Version "Master Sync - V60 HYBRID"
+// Le meilleur des deux mondes : 
+// - Proxy Image V49 (Sharp + Stream) qui fonctionnait
+// - Mapping V54 (Slugs corrigés) pour le nouveau site
 
 const Airtable = require('airtable');
 const axios = require('axios');
-const sharp = require('sharp'); // Réactivé pour la compression indispensable
+const sharp = require('sharp'); // On utilise Sharp car ton package.json est prêt
 
 // --- 1. CONFIGURATION API ---
 const airtableBase = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
@@ -23,23 +25,23 @@ const WF_IDS = {
   partners: process.env.WF_COLLECTION_ID_PARTENAIRES
 };
 
-// --- 2. CONFIGURATION DES TABLES AIRTABLE ---
+// --- 2. CONFIGURATION DES TABLES AIRTABLE (V2) ---
 const AIRTABLE_TABLE_PRODUITS = 'Gisement V2'; 
 const AIRTABLE_TABLE_PARTENAIRES = 'Partenaires V2';
 
-// --- 3. CONFIGURATION DES SLUGS WEBFLOW (V53 Validée) ---
+// --- 3. CONFIGURATION DES SLUGS WEBFLOW (Validés en V53/54) ---
 const SLUGS = {
     nom: 'name',
     slug: 'slug',
     statut: 'statut-vente',        
     partenaire: 'partenaire',
-    categorie: 'categorie-produit', 
+    categorie: 'categorie-produit', // "ie" à la fin
     marque: 'marque-produit',
     ref: 'reference-produit',
     unite: 'unite',
     stock_depart: 'stock-de-depart',
     stock_restant: 'stock-restant',
-    info_stock: 'infos-sup-stock',  
+    info_stock: 'infos-sup-stock',  // Pluriel "infos"
     dims: 'dimensions-du-produit',
     desc: 'description',
     prix_vente: 'prix-de-vente',
@@ -73,38 +75,37 @@ function cleanFields(obj) {
   return obj;
 }
 
-// --- PROXY COMPACTEUR (V59) ---
+// --- PROXY V49 (SHARP + STREAM) ---
+// C'est la méthode qui fonctionnait pour toi
 async function handleProxy(req, res) {
     const imageUrl = req.query.proxy_url;
     if (!imageUrl) return res.status(404).send('No URL provided');
     
     try {
-        // 1. Télécharger l'image brute depuis Airtable
+        // 1. Récupération du flux
         const response = await axios({
             method: 'get',
             url: decodeURIComponent(imageUrl),
-            responseType: 'arraybuffer', // On prend tout en mémoire
-            headers: {
-                'User-Agent': 'Mozilla/5.0'
-            }
+            responseType: 'stream'
         });
-        
-        // 2. COMPRESSION AGRESSIVE
-        // Objectif : Passer sous la barre des 4.5MB de Vercel
-        const optimizedBuffer = await sharp(response.data)
-            .resize({ width: 1200, withoutEnlargement: true }) // Max 1200px
-            .jpeg({ quality: 80, mozjpeg: true }) // JPEG optimisé (plus compatible que WebP parfois)
-            .toBuffer();
 
-        // 3. Envoi à Webflow
-        res.setHeader('Content-Type', 'image/jpeg');
-        res.setHeader('Content-Length', optimizedBuffer.length);
-        res.status(200).send(optimizedBuffer);
+        // 2. Traitement Sharp à la volée (Redim + WebP)
+        const transform = sharp()
+            .resize({ 
+                width: 1600, // Largeur max
+                withoutEnlargement: true 
+            })
+            .webp({ quality: 80 }); // Optimisation
+
+        // 3. Header
+        res.setHeader('Content-Type', 'image/webp'); 
+        
+        // 4. Tuyau : Source -> Sharp -> Webflow
+        response.data.pipe(transform).pipe(res);
         
     } catch (error) {
-        console.error("Proxy Error:", error.message);
-        // Si ça plante, on renvoie une erreur explicite
-        res.status(500).send('Image processing failed');
+        console.error("Proxy Error:", error);
+        res.status(500).send('Error fetching image');
     }
 }
 
@@ -242,8 +243,8 @@ module.exports = async (req, res) => {
       const galleryAttach = record.get('Images galerie') || [];
       const galleryUrls = galleryAttach.map(img => makeProxyUrl(img.url, req));
 
+      // Construction des données avec le Mapping V54
       let fieldData = {};
-      
       fieldData[SLUGS.nom] = productName;
       fieldData[SLUGS.slug] = baseSlug;
       fieldData[SLUGS.marque] = record.get('Marque produit');
