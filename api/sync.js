@@ -24,8 +24,8 @@ const WF_IDS = {
 };
 
 // --- 2. CONFIGURATION DES TABLES AIRTABLE (V2) ---
-const AIRTABLE_TABLE_PRODUITS = 'Gisement V2'; 
-const AIRTABLE_TABLE_PARTENAIRES = 'Partenaires V2';
+const AIRTABLE_TABLE_PRODUITS = 'Gisement'; 
+const AIRTABLE_TABLE_PARTENAIRES = 'Partenaires';
 
 // --- 3. CONFIGURATION DES SLUGS WEBFLOW ---
 const SLUGS = {
