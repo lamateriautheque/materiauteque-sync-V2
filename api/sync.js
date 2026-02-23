@@ -1,6 +1,7 @@
-// Version "Master Sync - V70 EXTENSION FIX"
-// Basé sur ta V49 originale qui marchait parfaitement.
-// Ajout d'un "leurre" (.jpg) à la fin des URL proxy pour forcer Webflow à accepter le téléchargement.
+// Version "Master Sync - V71 SLUG UPDATE FIX"
+// Basé sur la V70.
+// Correction de l'erreur Webflow "Unique value is already in database" lors du PATCH.
+// On retire le champ 'slug' lors d'une mise à jour pour éviter le conflit.
 
 const Airtable = require("airtable");
 const axios = require("axios");
@@ -239,7 +240,6 @@ module.exports = async (req, res) => {
       const galleryAttach = record.get("Images galerie") || [];
       const galleryUrls = galleryAttach.map((img) => makeProxyUrl(img.url, req));
 
-      // LOG DIAGNOSTIQUE : Pour voir ce qu'on envoie à Webflow
       if (mainImageUrl) {
         log(`   📸 URL Image générée : ${mainImageUrl.substring(0, 50)}...`);
       }
@@ -277,17 +277,22 @@ module.exports = async (req, res) => {
           const createRes = await webflowClient.post(`/collections/${WF_IDS.products}/items`, {
             isArchived: false,
             isDraft: false,
-            fieldData: fieldData,
+            fieldData: fieldData, // En création, on envoie le slug
           });
           itemId = createRes.data.id;
           log(`   ✅ SUCCÈS (ID: ${itemId})`);
         } else {
           log("   🚀 Mise à jour...");
+          
+          // --- FIX V71 : ON RETIRE LE SLUG POUR LA MISE À JOUR ---
+          let updateFieldData = { ...fieldData };
+          delete updateFieldData.slug; // Empêche l'erreur "Unique value is already in database"
+          
           try {
             await webflowClient.patch(`/collections/${WF_IDS.products}/items/${itemId}`, {
               isArchived: false,
               isDraft: false,
-              fieldData: fieldData,
+              fieldData: updateFieldData, // On envoie les données sans le slug
             });
             log(`   ✅ SUCCÈS.`);
           } catch (updateErr) {
@@ -296,7 +301,7 @@ module.exports = async (req, res) => {
               const createRes = await webflowClient.post(`/collections/${WF_IDS.products}/items`, {
                 isArchived: false,
                 isDraft: false,
-                fieldData: fieldData,
+                fieldData: fieldData, // On remet le slug pour la recréation
               });
               itemId = createRes.data.id;
               log(`   ✅ SUCCÈS RECRÉATION (Nouvel ID: ${itemId})`);
