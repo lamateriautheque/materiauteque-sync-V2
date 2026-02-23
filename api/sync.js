@@ -1,7 +1,7 @@
-// Version "Master Sync - V71 SLUG UPDATE FIX"
-// Basé sur la V70.
-// Correction de l'erreur Webflow "Unique value is already in database" lors du PATCH.
-// On retire le champ 'slug' lors d'une mise à jour pour éviter le conflit.
+// Version "Master Sync - V72 CACHE BUSTER"
+// Basé sur la V71.
+// FIX CRITIQUE : Webflow ignore les images lors d'un PATCH si l'URL est identique à la précédente.
+// On ajoute un Timestamp (Date.now) à l'URL pour FORCER Webflow à re-télécharger l'image.
 
 const Airtable = require("airtable");
 const axios = require("axios");
@@ -63,8 +63,10 @@ function makeProxyUrl(originalUrl, req) {
   const protocol = req.headers["x-forwarded-proto"] || "https";
   const host = req.headers.host;
   
-  // LE FIX EST ICI : On ajoute "&ext=image.jpg" à la fin pour rassurer le système de sécurité Webflow
-  return `${protocol}://${host}/api/sync?proxy_url=${encodeURIComponent(originalUrl)}&ext=image.jpg`;
+  // FIX V72 : "Cache-Buster"
+  // L'ajout de &cb=Date.now() force Webflow à voir une nouvelle URL à chaque synchro !
+  // L'ajout de &ext=image.jpg rassure Webflow sur le format.
+  return `${protocol}://${host}/api/sync?proxy_url=${encodeURIComponent(originalUrl)}&cb=${Date.now()}&ext=image.jpg`;
 }
 
 // --- GESTION DES OPTIONS ---
@@ -156,7 +158,7 @@ async function getPartnerName(recordId) {
   }
 }
 
-// --- PROXY AVEC COMPRESSION SHARP (Code exact V49) ---
+// --- PROXY AVEC COMPRESSION SHARP ---
 async function handleProxy(req, res) {
   const imageUrl = req.query.proxy_url;
   if (!imageUrl) return res.status(404).send("No URL provided");
@@ -168,11 +170,12 @@ async function handleProxy(req, res) {
       responseType: "stream",
     });
 
+    // FIX V72 : On passe en JPEG avec mozjpeg pour être sûr à 100% que Webflow digère le fichier
     const transform = sharp()
       .resize({ width: 1600, withoutEnlargement: true })
-      .webp({ quality: 80 });
+      .jpeg({ quality: 80, mozjpeg: true });
 
-    res.setHeader("Content-Type", "image/webp");
+    res.setHeader("Content-Type", "image/jpeg");
     response.data.pipe(transform).pipe(res);
   } catch (error) {
     console.error("Proxy Error:", error);
@@ -241,7 +244,7 @@ module.exports = async (req, res) => {
       const galleryUrls = galleryAttach.map((img) => makeProxyUrl(img.url, req));
 
       if (mainImageUrl) {
-        log(`   📸 URL Image générée : ${mainImageUrl.substring(0, 50)}...`);
+        log(`   📸 URL Image générée (avec cache buster) : ${mainImageUrl.substring(0, 60)}...`);
       }
 
       let fieldData = {
@@ -284,7 +287,6 @@ module.exports = async (req, res) => {
         } else {
           log("   🚀 Mise à jour...");
           
-          // --- FIX V71 : ON RETIRE LE SLUG POUR LA MISE À JOUR ---
           let updateFieldData = { ...fieldData };
           delete updateFieldData.slug; // Empêche l'erreur "Unique value is already in database"
           
