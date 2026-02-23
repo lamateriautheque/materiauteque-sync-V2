@@ -1,6 +1,6 @@
-// Version "Master Sync - V67 DIRECT LINK"
-// Tentative de connexion directe Airtable -> Webflow sans passer par le Proxy Vercel
-// Objectif : Éliminer les erreurs de Timeout/Mémoire du serveur intermédiaire
+// Version "Master Sync - V68 SMART DIRECT LINK"
+// Contourne la limite de 4Mo de Webflow en utilisant intelligemment 
+// les miniatures (thumbnails) compressées d'Airtable pour les gros fichiers.
 
 const Airtable = require('airtable');
 const axios = require('axios');
@@ -24,8 +24,8 @@ const WF_IDS = {
 };
 
 // --- 2. CONFIGURATION DES TABLES AIRTABLE (V2) ---
-const AIRTABLE_TABLE_PRODUITS = 'Gisement'; 
-const AIRTABLE_TABLE_PARTENAIRES = 'Partenaires';
+const AIRTABLE_TABLE_PRODUITS = 'Gisement V2'; 
+const AIRTABLE_TABLE_PARTENAIRES = 'Partenaires V2';
 
 // --- 3. CONFIGURATION DES SLUGS WEBFLOW ---
 const SLUGS = {
@@ -69,6 +69,26 @@ function cleanFields(obj) {
     }
   });
   return obj;
+}
+
+// --- INTELLIGENCE IMAGE (Nouveau) ---
+// Récupère l'image originale si elle est légère, sinon prend la version compressée d'Airtable
+function getSafeImageUrl(img, log) {
+    if (!img) return null;
+    
+    const sizeInMB = (img.size / 1048576).toFixed(2); // Convertit en Mo
+    
+    // Webflow bloque à 4 Mo. On met la limite de sécurité à 3.5 Mo
+    if (img.size > 3500000) {
+        if (log) log(`   ⚠️ Image lourde détectée (${sizeInMB} Mo). Utilisation de la miniature Airtable pour Webflow.`);
+        
+        // Airtable génère plusieurs tailles. "full" est une grande image compressée, "large" est moyenne (512px).
+        if (img.thumbnails && img.thumbnails.full) return img.thumbnails.full.url;
+        if (img.thumbnails && img.thumbnails.large) return img.thumbnails.large.url;
+    }
+    
+    // Si l'image fait moins de 3.5 Mo, Webflow l'acceptera sans problème.
+    return img.url;
 }
 
 // --- GESTION DES OPTIONS ---
@@ -123,7 +143,6 @@ async function getPartnerName(recordId) {
 // --- MAIN SCRIPT ---
 
 module.exports = async (req, res) => {
-  // Plus de gestion de proxy_url ici
   if (req.query.secret !== process.env.SYNC_SECRET) return res.status(401).json({ error: 'Unauthorized' });
 
   const logs = [];
@@ -168,18 +187,16 @@ module.exports = async (req, res) => {
           statutVenteId = await getOrAddOptionId(WF_IDS.products, SLUGS.statut, statutAirtable, log);
       }
 
-      // --- MODIFICATION V67 : LIENS DIRECTS AIRTABLE ---
-      // On prend l'URL directe (elle dure quelques heures, suffisant pour l'import)
-      
+      // --- TRAITEMENT INTELLIGENT DES IMAGES ---
       const mainImageAttach = record.get('Image principale');
       const mainImageUrl = (mainImageAttach && mainImageAttach.length > 0) 
-          ? mainImageAttach[0].url // DIRECT URL
+          ? getSafeImageUrl(mainImageAttach[0], log)
           : null;
       
       const galleryAttach = record.get('Images galerie') || [];
-      const galleryUrls = galleryAttach.map(img => img.url); // DIRECT URL
+      const galleryUrls = galleryAttach.map(img => getSafeImageUrl(img, log)).filter(url => url !== null);
 
-      if (mainImageUrl) log(`   📸 Image URL (Direct): ${mainImageUrl.substring(0, 30)}...`);
+      if (mainImageUrl) log(`   📸 Image prête pour Webflow !`);
 
       let fieldData = {};
       fieldData[SLUGS.nom] = productName;
