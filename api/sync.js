@@ -1,11 +1,11 @@
-// Version "Master Sync - V72 CACHE BUSTER"
-// Basé sur la V71.
-// FIX CRITIQUE : Webflow ignore les images lors d'un PATCH si l'URL est identique à la précédente.
-// On ajoute un Timestamp (Date.now) à l'URL pour FORCER Webflow à re-télécharger l'image.
+// Version "Master Sync - V73 DIRECT FAST LINK"
+// 1. Suppression TOTALE du Proxy Vercel (cause des abandons silencieux par Webflow API V2).
+// 2. Utilisation des URLs directes d'Airtable (Instantané, aucun timeout possible).
+// 3. Sécurité automatique anti-4Mo (utilisation de la miniature Airtable si fichier trop lourd).
+// 4. Ciblage des bonnes tables : "Gisement" et "Partenaires".
 
 const Airtable = require("airtable");
 const axios = require("axios");
-const sharp = require("sharp");
 
 // --- CONFIGURATION ---
 const airtableBase = new Airtable({
@@ -27,6 +27,7 @@ const WF_IDS = {
   partners: process.env.WF_COLLECTION_ID_PARTENAIRES,
 };
 
+// Les VRAIES tables d'origine
 const AIRTABLE_TABLE_PRODUITS = "Gisement";
 const AIRTABLE_TABLE_PARTENAIRES = "Partenaires";
 
@@ -58,15 +59,18 @@ function cleanFields(obj) {
   return obj;
 }
 
-function makeProxyUrl(originalUrl, req) {
-  if (!originalUrl) return null;
-  const protocol = req.headers["x-forwarded-proto"] || "https";
-  const host = req.headers.host;
+// INTELLIGENCE IMAGE : Extraction du lien direct
+function getDirectImageUrl(imgObj) {
+  if (!imgObj) return null;
   
-  // FIX V72 : "Cache-Buster"
-  // L'ajout de &cb=Date.now() force Webflow à voir une nouvelle URL à chaque synchro !
-  // L'ajout de &ext=image.jpg rassure Webflow sur le format.
-  return `${protocol}://${host}/api/sync?proxy_url=${encodeURIComponent(originalUrl)}&cb=${Date.now()}&ext=image.jpg`;
+  // Webflow V2 refuse les images de plus de 4 Mo.
+  // Si l'image fait plus de 3.5 Mo, on prend la version "large" compressée par Airtable
+  if (imgObj.size > 3500000 && imgObj.thumbnails && imgObj.thumbnails.large) {
+      return imgObj.thumbnails.large.url;
+  }
+  
+  // Sinon, on envoie le lien original qui sera instantanément téléchargé par Webflow
+  return imgObj.url;
 }
 
 // --- GESTION DES OPTIONS ---
@@ -158,35 +162,9 @@ async function getPartnerName(recordId) {
   }
 }
 
-// --- PROXY AVEC COMPRESSION SHARP ---
-async function handleProxy(req, res) {
-  const imageUrl = req.query.proxy_url;
-  if (!imageUrl) return res.status(404).send("No URL provided");
-
-  try {
-    const response = await axios({
-      method: "get",
-      url: decodeURIComponent(imageUrl),
-      responseType: "stream",
-    });
-
-    // FIX V72 : On passe en JPEG avec mozjpeg pour être sûr à 100% que Webflow digère le fichier
-    const transform = sharp()
-      .resize({ width: 1600, withoutEnlargement: true })
-      .jpeg({ quality: 80, mozjpeg: true });
-
-    res.setHeader("Content-Type", "image/jpeg");
-    response.data.pipe(transform).pipe(res);
-  } catch (error) {
-    console.error("Proxy Error:", error);
-    res.status(500).send("Error fetching or processing image");
-  }
-}
-
 // --- MAIN SCRIPT ---
 
 module.exports = async (req, res) => {
-  if (req.query.proxy_url) return handleProxy(req, res);
   if (req.query.secret !== process.env.SYNC_SECRET) return res.status(401).json({ error: "Unauthorized" });
 
   const logs = [];
@@ -237,14 +215,15 @@ module.exports = async (req, res) => {
         statutVenteId = await getOrAddOptionId(WF_IDS.products, "statut-vente", statutAirtable, log);
       }
 
+      // EXTRACTION DIRECTE DES IMAGES (Sans Proxy)
       const mainImageAttach = record.get("Image principale");
-      const mainImageUrl = mainImageAttach && mainImageAttach.length > 0 ? makeProxyUrl(mainImageAttach[0].url, req) : null;
+      const mainImageUrl = mainImageAttach && mainImageAttach.length > 0 ? getDirectImageUrl(mainImageAttach[0]) : null;
 
       const galleryAttach = record.get("Images galerie") || [];
-      const galleryUrls = galleryAttach.map((img) => makeProxyUrl(img.url, req));
+      const galleryUrls = galleryAttach.map((img) => getDirectImageUrl(img)).filter(url => url !== null);
 
       if (mainImageUrl) {
-        log(`   📸 URL Image générée (avec cache buster) : ${mainImageUrl.substring(0, 60)}...`);
+        log(`   📸 URL Image DIRECTE envoyée : ${mainImageUrl.substring(0, 60)}...`);
       }
 
       let fieldData = {
@@ -280,7 +259,7 @@ module.exports = async (req, res) => {
           const createRes = await webflowClient.post(`/collections/${WF_IDS.products}/items`, {
             isArchived: false,
             isDraft: false,
-            fieldData: fieldData, // En création, on envoie le slug
+            fieldData: fieldData, 
           });
           itemId = createRes.data.id;
           log(`   ✅ SUCCÈS (ID: ${itemId})`);
@@ -288,13 +267,13 @@ module.exports = async (req, res) => {
           log("   🚀 Mise à jour...");
           
           let updateFieldData = { ...fieldData };
-          delete updateFieldData.slug; // Empêche l'erreur "Unique value is already in database"
+          delete updateFieldData.slug; 
           
           try {
             await webflowClient.patch(`/collections/${WF_IDS.products}/items/${itemId}`, {
               isArchived: false,
               isDraft: false,
-              fieldData: updateFieldData, // On envoie les données sans le slug
+              fieldData: updateFieldData, 
             });
             log(`   ✅ SUCCÈS.`);
           } catch (updateErr) {
@@ -303,7 +282,7 @@ module.exports = async (req, res) => {
               const createRes = await webflowClient.post(`/collections/${WF_IDS.products}/items`, {
                 isArchived: false,
                 isDraft: false,
-                fieldData: fieldData, // On remet le slug pour la recréation
+                fieldData: fieldData, 
               });
               itemId = createRes.data.id;
               log(`   ✅ SUCCÈS RECRÉATION (Nouvel ID: ${itemId})`);
