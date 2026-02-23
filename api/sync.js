@@ -1,8 +1,7 @@
-// Version "Master Sync - V73 DIRECT FAST LINK"
-// 1. Suppression TOTALE du Proxy Vercel (cause des abandons silencieux par Webflow API V2).
-// 2. Utilisation des URLs directes d'Airtable (Instantané, aucun timeout possible).
-// 3. Sécurité automatique anti-4Mo (utilisation de la miniature Airtable si fichier trop lourd).
-// 4. Ciblage des bonnes tables : "Gisement" et "Partenaires".
+// Version "Master Sync - V74 LIGHTWEIGHT THUMBNAILS"
+// 1. Suppression du Proxy Vercel
+// 2. FORCE l'utilisation des miniatures Airtable ("large") pour TOUTES les images afin d'éviter la limite des 4Mo de Webflow.
+// 3. Ciblage des tables : "Gisement" et "Partenaires".
 
 const Airtable = require("airtable");
 const axios = require("axios");
@@ -59,17 +58,17 @@ function cleanFields(obj) {
   return obj;
 }
 
-// INTELLIGENCE IMAGE : Extraction du lien direct
+// INTELLIGENCE IMAGE : Force l'utilisation de la miniature légère
 function getDirectImageUrl(imgObj) {
   if (!imgObj) return null;
   
-  // Webflow V2 refuse les images de plus de 4 Mo.
-  // Si l'image fait plus de 3.5 Mo, on prend la version "large" compressée par Airtable
-  if (imgObj.size > 3500000 && imgObj.thumbnails && imgObj.thumbnails.large) {
+  // SOLUTION RADICALE : On utilise TOUJOURS la miniature "large" générée par Airtable.
+  // Cela garantit un poids très faible (souvent < 500 Ko) et évite tout blocage par Webflow.
+  if (imgObj.thumbnails && imgObj.thumbnails.large) {
       return imgObj.thumbnails.large.url;
   }
   
-  // Sinon, on envoie le lien original qui sera instantanément téléchargé par Webflow
+  // Fallback de sécurité si la miniature n'a pas pu être générée
   return imgObj.url;
 }
 
@@ -215,7 +214,7 @@ module.exports = async (req, res) => {
         statutVenteId = await getOrAddOptionId(WF_IDS.products, "statut-vente", statutAirtable, log);
       }
 
-      // EXTRACTION DIRECTE DES IMAGES (Sans Proxy)
+      // EXTRACTION DES IMAGES MINIATURES (Poids Plume)
       const mainImageAttach = record.get("Image principale");
       const mainImageUrl = mainImageAttach && mainImageAttach.length > 0 ? getDirectImageUrl(mainImageAttach[0]) : null;
 
@@ -223,7 +222,7 @@ module.exports = async (req, res) => {
       const galleryUrls = galleryAttach.map((img) => getDirectImageUrl(img)).filter(url => url !== null);
 
       if (mainImageUrl) {
-        log(`   📸 URL Image DIRECTE envoyée : ${mainImageUrl.substring(0, 60)}...`);
+        log(`   📸 URL Image allégée envoyée : ${mainImageUrl.substring(0, 60)}...`);
       }
 
       let fieldData = {
